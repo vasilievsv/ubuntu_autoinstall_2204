@@ -1,0 +1,2 @@
+# ubuntu_autoinstall_2204
+Автоустанощик
