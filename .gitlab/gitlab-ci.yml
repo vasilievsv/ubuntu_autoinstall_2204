@@ -1,0 +1,42 @@
+#
+# ШАБЛОН
+# 
+# build & deploy
+#
+
+variables:
+  GIT_STRATEGY: fetch
+  GIT_DEPTH   : 0     # Вытаскиваем всю историю 
+
+stages:
+  - build
+  - deploy
+
+#
+# СБОРКА
+#
+build-job:
+  stage: build
+  # only:
+  #   - main
+  script:
+  - |
+      chmod +x .gitlab/scripts/*.sh 
+      chmod +x make-iso 
+      .gitlab/scripts/do_fetch.sh
+      ./make-iso
+
+      pattern="*.iso"
+      files=( $pattern )
+      echo "${files[0]}" 
+
+#
+# ДЕПЛОЙ
+#
+deploy-job:
+  stage: deploy
+  # only:
+  #   - main
+  script:
+  - |
+      ls -lah

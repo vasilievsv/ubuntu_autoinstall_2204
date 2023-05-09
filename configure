@@ -1,0 +1,136 @@
+#!/bin/bash
+#
+# ┌──────────────────────────────────────────────────────────────────────────────────────┐
+# │                                                                                      │
+# │                                 Конфигуратор                                         │
+# │                                                                                      │
+# │           Скрипт 'configure' облегчает обнаружение и настройку среды сборки          │
+# │           программного обеспечения и обеспечивает простой и последовательный         │
+# │           способ сборки, компиляции и запуск с помощью набора простых команд         │
+# └──────────────────────────────────────────────────────────────────────────────────────┘
+#
+
+echo "-----------------------------------------------------------------------"
+echo " BLOCK-0: init"
+echo "-----------------------------------------------------------------------"
+
+arg_1=${1:-"0.0.1"} # Версия по умолчанию
+arg_2=${2:-"OFF"}   # Сборк unit-тестов
+arg_3=${3:-"8"}     # кол-во job
+
+var_use_version="${arg_1%.*}.$((${arg_1##*.}))";
+var_use_unit_test={$arg_2};
+var_use_thread=${arg_3};
+var_use_docker=${4:-"docker"} # чем собирать podman или docker
+
+echo "use_version  : "$var_use_version;
+echo "use_unit_test: "$var_use_unit_test;
+echo "use_thread   : "$var_use_thread;
+
+# чек директорий
+[ -d "bin" ] && rm -R bin  || true
+[ -d "build" ] && rm -R build  || true
+
+echo "-----------------------------------------------------------------------"
+echo " BLOCK-1: Проверка/Установка зависимостей для проекта"
+echo "-----------------------------------------------------------------------"
+
+apt-get install -y xorriso isolinux fdisk
+
+#
+# DETECT WSL2
+#
+if grep -q WSL2 /proc/version; then
+	echo ""
+    echo "INFO: This is WSL"
+    echo ""
+else
+	echo ""
+    echo "INFO: This is not WSL"
+    echo ""
+fi
+
+
+echo "-----------------------------------------------------------------------"
+echo " BLOCK-2: Генерация обертки для CMake (Makefile)"
+echo "-----------------------------------------------------------------------"
+
+cat << EOT > ./Makefile
+
+# auto-generated: $(date)
+# line-ending: lf
+# indent: tab
+
+.PHONY: build
+.DEFAULT_GOAL:= build
+.SILENT: build
+
+define HEADER
+
+⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠋⠉⠁⠀⠀⠀⠀⠈⠉⠙⠛⠿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⠿⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⠿⣿⣿⣿⣿⣿
+⣿⣿⣿⡟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣾⣿⣦⠀⠀⠀⠈⢻⣿⣿⣿
+⣿⣿⠏⠀⠀⠀⠀⠀⠀⠀⠀⢠⣶⣶⣾⣷⣶⣆⠸⣿⣿⡟⠀⠀⠀⠀⠀⠹⣿⣿
+⣿⠃⠀⠀⠀⠀⠀⠀⣠⣾⣷⡈⠻⠿⠟⠻⠿⢿⣷⣤⣤⣄⠀⠀⠀⠀⠀⠀⠘⣿
+⡏⠀⠀⠀⠀⠀⠀⣴⣿⣿⠟⠁⠀⠀⠀⠀⠀⠀⠈⠻⣿⣿⣦⠀⠀⠀⠀⠀⠀⢹
+⠁⠀⠀⢀⣤⣤⡘⢿⣿⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢹⣿⣿⡇⠀⠀⠀⠀⠀⠈
+⠀⠀⠀⣿⣿⣿⡇⢸⣿⡁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢈⣉⣉⡁⠀⠀⠀⠀⠀⠀
+⡀⠀⠀⠈⠛⠛⢡⣾⣿⣇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣸⣿⣿⡇⠀⠀⠀⠀⠀⢀
+⣇⠀⠀⠀⠀⠀⠀⠻⣿⣿⣦⡀⠀⠀⠀⠀⠀⠀⢀⣴⣿⣿⠟⠀⠀⠀⠀⠀⠀⣸
+⣿⡄⠀⠀⠀⠀⠀⠀⠙⢿⡿⢁⣴⣶⣦⣴⣶⣾⡿⠛⠛⠋⠀⠀⠀⠀⠀⠀⢠⣿
+⣿⣿⣆⠀⠀⠀⠀⠀⠀⠀⠀⠘⠿⠿⢿⡿⠿⠏⢰⣿⣿⣧⠀⠀⠀⠀⠀⣰⣿⣿
+⣿⣿⣿⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢿⣿⠟⠀⠀⠀⢀⣼⣿⣿⣿
+⣿⣿⣿⣿⣿⣶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣶⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣶⣤⣄⣀⡀⠀⠀⠀⠀⢀⣀⣠⣤⣶⣿⣿⣿⣿⣿⣿⣿⣿
+
+[bash/wrapper]
+usage:
+  make 
+  make iso
+  make help
+
+endef
+export HEADER
+export MAKEFLAGS=--no-print-directory
+
+#
+# ISO: 
+#
+iso:
+	(exec ./scripts/do_fetch.sh) && \
+	(exec ./scripts/make_iso)
+
+#
+# INDOCK: сборка в докере
+#
+indock:
+	@echo action $(pwd) \$(filter-out \$@,\$(MAKECMDGOALS)) &&\
+	${var_use_docker} run -it --rm -w $(pwd) -v $(pwd):$(pwd) ${action:-"dev/mybox:22.04"} /bin/bash
+#
+# GITSYNC: синхроним с удаленным repo
+#
+gitsync:
+	git submodule update --init --remote  --progress
+
+build:
+	echo -e "not implement..."
+clean:
+	echo -e "not implement..."
+help:
+	@LC_ALL=C make -pRrq -f \$(lastword \$(MAKEFILE_LIST)) : 2>/dev/null | awk -v RS= -F: '/(^|\n)# Files(\n|\$\$)/,/(^|\n)# Finished Make data base/ {if (\$\$1 !~ "^[#.]") {print "make ",\$\$1}}' | sort | egrep -v -e '^[^[:alnum:]]' -e '^\$@\$\$'
+
+_banner:
+	@echo "\$\${HEADER}"
+
+_init_:
+	echo -e "not implement..."
+	#cmake -S . -B build -D_VERSION_:STRING=${var_use_version} -DBUILD_TESTING:BOOL=${var_use_unit_test}
+
+# глушилка для передачи arg
+%:;     # thanks to chakrit
+#@:;    # thanks to William Purse
+EOT
+
+# _MAIN_
+make _init_
+make _banner

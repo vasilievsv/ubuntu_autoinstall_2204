@@ -1,0 +1,158 @@
+#cloud-config
+
+timezone : 'Etc/UTC'
+
+autoinstall:
+#
+# Пакетный менеджер
+#
+  package_update: false
+  package_upgrade: false
+  apt_pipelining: false
+  updates: security
+  apt:
+    disable_suites: [security]
+  
+  kernel:
+  fallback-package: linux-image-generic
+  package: linux-image-generic
+
+#
+# Главная
+#
+  identity:
+    hostname: 'mybox'
+    password: <sha256>
+    realname: 'user'
+    username: user
+  keyboard:
+    layout: us
+    toggle: null
+    variant: ''
+  locale: en_US.UTF-8
+#
+# Настройка сети DHCP
+#
+  network:
+      version: 2
+      ethernets:
+          zz-all-en:
+              match:
+                  name: "en*"
+              dhcp4: true
+              optional: yes
+          zz-all-eth:
+              match:
+                  name: "eth*"
+              dhcp4: true
+              optional: yes
+  ssh:
+    allow-pw: true
+    authorized-keys: [ '<SSH KEY>' ]
+    install-server: true
+
+  interactive-sections:
+    - storage
+
+# Логи установщика
+# 	/var/log/cloud-init*
+# 	/run/cloud-init*
+# 	/var/log/cloud
+# 	/tmp/install.log
+
+#
+# Разбивка в интерактивном режиме
+
+  #storage:
+  #  config:
+
+#
+# Разбивка в сценарном режиме 
+  #	С двумя NVME
+  #  - {grub_device: false,  id: disk-nvme1n1,   name: '',  path: /dev/nvme1n1, preserve: false,  ptable: gpt,  type: disk, wipe: superblock-recursive}
+  #  - {device: disk-nvme1n1,id: partition-5,    flag: '',  grub_device: false,  number: 1, preserve: false, size: -1,        type: partition}
+
+  # С одним NVME
+  #  - {type: disk, 		grub_device: true, 	id: disk-nvme0n1,	name: '',  path: /dev/nvme0n1, preserve: false,  ptable: gpt,   wipe: superblock}
+  #  - {type: partition, 	grub_device: false,	id: partition-3,  	device: disk-nvme0n1,    flag: bios_grub,      number: 1, preserve: false, size: 1048576   }
+  #  - {type: partition, 	grub_device: false, id: partition-4,	device: disk-nvme0n1,    flag: '',             number: 2, preserve: false, size: -1,        wipe: superblock}
+  #  - {type: format, 		id: format-2, 		fstype: ext4,               preserve: false,            volume: partition-4}
+  #  - {type: mount, 		id: mount-1, 		device: format-2,            path: /}
+  
+
+#------------------------------------------------------------------------------
+#  
+#------------------------------------------------------------------------------
+  early-commands:  
+  #
+  # блокировака скачивание ядра
+  #
+  - apt-mark hold linux-image-generic linux-headers-generic
+  # 
+  - 'echo "deb [trusted=yes] file:/cdrom/nocloud/ ./" > /etc/apt/sources.list'
+  - apt update
+  
+ 
+#------------------------------------------------------------------------------
+#  
+#------------------------------------------------------------------------------
+  late-commands:
+
+  # !!! Здесь symlink не работает
+  - mkdir -p /target/cdrom
+  - mkdir -p /target/private_data
+  - cp /cdrom/nocloud/* /target/cdrom/
+  - cp /cdrom/private_data/* /target/private_data
+
+  - cp /target/etc/apt/sources.list /target/etc/apt/sources.list.d/home:ubuntu.list
+  - 'echo "deb [trusted=yes] file:/cdrom/ ./" > /target/etc/apt/sources.list'
+  
+  #
+  # !!! Отключение запроса пароля на вермя установки
+  #
+  - 'echo "user  ALL=(ALL) NOPASSWD:ALL" >> /target/etc/sudoers.d/user-nopw'
+  - 'echo "admin ALL=(ALL) NOPASSWD:ALL" >> /target/etc/sudoers.d/admin-nopw'
+  - chmod 440 /target/etc/sudoers.d/user-nopw
+  - chmod 440 /target/etc/sudoers.d/admin-nopw
+  
+  #
+  # Date/Time
+  #
+  - curtin in-target --target=/target -- timedatectl set-ntp true
+  - curtin in-target --target=/target -- timedatectl set-timezone UTC
+  
+  #
+  # INSTALL SYSTEM PACKAGE'S
+  #
+  - curtin in-target --target=/target -- apt-get update
+  - curtin in-target --target=/target -- apt-get install mc
+  - curtin in-target --target=/target -- apt-get install mybox-extra
+  - curtin in-target --target=/target -- apt-get install mybox-utils
+  - curtin in-target --target=/target -- apt-get install mybox  
+  - curtin in-target --target=/target -- apt-get update
+  
+    
+  #
+  # CLEAN TARGET
+  #
+  - curtin in-target --target=/target -- rm -R /private_data || true
+  - curtin in-target --target=/target -- apt-get --purge -y --quiet=2 autoremove
+  - curtin in-target --target=/target -- apt-get clean
+
+  #
+  # DEFAULT BUILT-IN REPO
+  #
+  - sh -c 'echo "deb [trusted=yes] http://mybox.local:9090/ sinara release" > /target/etc/apt/sources.list.d/home:local.list'
+  - sh -с 'echo "# external source use " > /target/etc/apt/sources.list'
+
+  #- sleep 3s
+  version: 1
+
+#------------------------------------------------------------------------------
+#  
+#------------------------------------------------------------------------------
+  error-commands:
+  - 'echo "****************************************"'
+  - 'echo "**   ERROR "'
+  - 'echo "****************************************"'
+ #- tail -200 /var/log/dpkg.log

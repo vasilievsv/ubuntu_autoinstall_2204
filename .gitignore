@@ -1,0 +1,5 @@
+/Rufus/*.log
+/rufus.ini
+/*.swp
+/tools/Rufus/*.log
+/tools/rufus.ini
